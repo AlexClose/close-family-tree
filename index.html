@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Close Family Tree</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, onValue, push, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ============================================================
+  // FIREBASE CONFIG — Replace with your own config after setup
+  // Instructions at bottom of page
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBpEF35jkXsNQUDkPcnLgBE-TKOnUATJwI",
+    authDomain: "close-family-tree.firebaseapp.com",
+    databaseURL: "https://close-family-tree-default-rtdb.firebaseio.com",
+    projectId: "close-family-tree",
+    storageBucket: "close-family-tree.firebasestorage.app",
+    messagingSenderId: "336375211042",
+    appId: "1:336375211042:web:fecc64a90f171935da167b",
+    measurementId: "G-FVL8KTFGSQ"
+  };
+
+  const INITIAL_DATA = {
+    "alexander": { id:"alexander", name:"Alexander Kenneth Close", born:"2001", birthPlace:"", died:"Living", deathPlace:"", gender:"male", parentIds:["richard"], notes:"Starting point of this family tree.", records:[], generation:0 },
+    "richard": { id:"richard", name:"Richard Emerson Close", born:"May 20, 1948", birthPlace:"Pennsylvania", died:"Living", deathPlace:"", gender:"male", parentIds:["lewis"], notes:"Father of Alexander Kenneth Close.", records:[], generation:1 },
+    "lewis": { id:"lewis", name:"Lewis Frederick Close", born:"1910", birthPlace:"Philadelphia, Pennsylvania", died:"1970", deathPlace:"", gender:"male", parentIds:["frederick_john","lilly"], spouseId:"catherine_wormeck", notes:"Born in Philadelphia. Still in Philadelphia in 1930 and 1935. Primary research target.", records:[{type:"Research Note",text:"WWII Draft Card likely exists — born 1910, would have registered ~1940. Search FamilySearch collection 2603579 or Fold3 for Pennsylvania WWII draft cards.",date:"2026"}], generation:2 },
+    "catherine_wormeck": { id:"catherine_wormeck", name:"Catherine M. Wormeck", born:"1912", birthPlace:"", died:"1992", deathPlace:"", gender:"female", parentIds:["rudolph_wormeck","emma_lange"], notes:"Wife of Lewis Frederick Close. Mother of Richard Emerson Close.", records:[], generation:2 },
+    "frederick_john": { id:"frederick_john", name:"Frederick John Close", born:"1881", birthPlace:"", died:"1969", deathPlace:"", gender:"male", parentIds:["frederic_close_jr","ernestine_grischke"], notes:"Father of Lewis Frederick Close. Lived 88 years: 1881–1969.", records:[{type:"Research Note",text:"WWI Draft Card likely exists — born 1881, would have registered 1917–1918. Search FamilySearch WWI draft records for Pennsylvania.",date:"2026"}], generation:3 },
+    "lilly": { id:"lilly", name:"Lilly F.H. Hartzell", born:"1878", birthPlace:"", died:"1956", deathPlace:"", gender:"female", parentIds:["jacob_hartzell","mary_wonsidler"], notes:"Mother of Lewis Frederick Close. Wife of Frederick John Close.", records:[], generation:3 },
+    "rudolph_wormeck": { id:"rudolph_wormeck", name:"Rudolph F. Wormeck", born:"1882", birthPlace:"", died:"1949", deathPlace:"", gender:"male", parentIds:["gottfried_wormeck","catherine_orlich"], notes:"Father of Catherine M. Wormeck.", records:[{type:"Research Note",text:"WWI Draft Card likely exists — born 1882. Search FamilySearch WWI draft records.",date:"2026"}], generation:3 },
+    "emma_lange": { id:"emma_lange", name:"Emma Elizabeth Lange", born:"1886", birthPlace:"", died:"1962", deathPlace:"", gender:"female", parentIds:["ernst_lange","mary_vetter"], notes:"Mother of Catherine M. Wormeck.", records:[], generation:3 },
+    "frederic_close_jr": { id:"frederic_close_jr", name:"Frederic Close Jr.", born:"", birthPlace:"", died:"", deathPlace:"", gender:"male", parentIds:["friederich_clos"], notes:"Son of Friederich Clos. Father of Frederick John Close.", records:[], generation:4 },
+    "ernestine_grischke": { id:"ernestine_grischke", name:"Ernestine M.M. Grischke", born:"", birthPlace:"", died:"", deathPlace:"", gender:"female", parentIds:[], notes:"Wife of Frederic Close Jr.", records:[], generation:4 },
+    "jacob_hartzell": { id:"jacob_hartzell", name:"Jacob R. Hartzell", born:"", birthPlace:"", died:"", deathPlace:"", gender:"male", parentIds:[], notes:"Father of Lilly F.H. Hartzell.", records:[], generation:4 },
+    "mary_wonsidler": { id:"mary_wonsidler", name:"Mary Jane Wonsidler", born:"", birthPlace:"", died:"", deathPlace:"", gender:"female", parentIds:[], notes:"Mother of Lilly F.H. Hartzell.", records:[], generation:4 },
+    "gottfried_wormeck": { id:"gottfried_wormeck", name:"Gottfried J. Wormeck", born:"", birthPlace:"", died:"", deathPlace:"", gender:"male", parentIds:[], notes:"Father of Rudolph F. Wormeck.", records:[], generation:4 },
+    "catherine_orlich": { id:"catherine_orlich", name:"Catherine Orlich", born:"", birthPlace:"", died:"", deathPlace:"", gender:"female", parentIds:[], notes:"Mother of Rudolph F. Wormeck.", records:[], generation:4 },
+    "ernst_lange": { id:"ernst_lange", name:"Ernst \"Ernest\" H. Lange", born:"", birthPlace:"", died:"", deathPlace:"", gender:"male", parentIds:[], notes:"Father of Emma Elizabeth Lange.", records:[], generation:4 },
+    "mary_vetter": { id:"mary_vetter", name:"Mary Rosina Vetter", born:"", birthPlace:"", died:"", deathPlace:"", gender:"female", parentIds:[], notes:"Mother of Emma Elizabeth Lange.", records:[], generation:4 },
+    "friederich_clos": { id:"friederich_clos", name:"Friederich Clos", born:"1830", birthPlace:"Germany", died:"1897", deathPlace:"", gender:"male", parentIds:["clos_ancestor","anna_drumm"], notes:"German immigrant ancestor. Key research target. Parents: Clos/Claus/Closs (1779–1846) and Anna M.E. Drumm (1784–1848).", records:[{type:"Research Note",text:"Search German church records (Kirchenbücher) via Archion.de or Matricula-online.eu. Finding his village of origin is key to unlocking earlier German generations.",date:"2026"},{type:"Research Note",text:"Look for naturalization or immigration records — a ship manifest could reveal his exact German hometown.",date:"2026"}], generation:5 },
+    "philippina_seil": { id:"philippina_seil", name:"Philippina Bena Seil", born:"1828", birthPlace:"", died:"1913", deathPlace:"", gender:"female", parentIds:["johann_seyl","karolina_knapp"], notes:"Wife of Friederich Clos.", records:[], generation:5 },
+    "clos_ancestor": { id:"clos_ancestor", name:"Clos / Claus / Closs", born:"1779", birthPlace:"Germany", died:"1846", deathPlace:"", gender:"male", parentIds:[], notes:"Earliest known Close/Clos ancestor. German origin confirmed.", records:[], generation:6 },
+    "anna_drumm": { id:"anna_drumm", name:"Anna M.E. Drumm", born:"1784", birthPlace:"Germany", died:"1848", deathPlace:"", gender:"female", parentIds:[], notes:"Wife of Clos/Claus/Closs. German origin.", records:[], generation:6 },
+    "johann_seyl": { id:"johann_seyl", name:"Johann Georg Seyl", born:"1795", birthPlace:"Germany", died:"1873", deathPlace:"", gender:"male", parentIds:[], notes:"German ancestor. Father of Philippina Bena Seil.", records:[], generation:6 },
+    "karolina_knapp": { id:"karolina_knapp", name:"Karolina Knapp", born:"1794", birthPlace:"", died:"", deathPlace:"", gender:"female", parentIds:[], notes:"Mother of Philippina Bena Seil.", records:[], generation:6 }
+  };
+
+  let app, db, people = {}, selectedId = null, currentView = "tree", editingId = null;
+  let firebaseReady = false;
+
+  function tryInitFirebase() {
+    try {
+      if (firebaseConfig.apiKey === "REPLACE_WITH_YOUR_API_KEY") {
+        showSetupBanner();
+        people = INITIAL_DATA;
+        render();
+        return;
+      }
+      app = initializeApp(firebaseConfig);
+      db = getDatabase(app);
+      const peopleRef = ref(db, 'closeFamily/people');
+      onValue(peopleRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          set(peopleRef, INITIAL_DATA);
+          people = INITIAL_DATA;
+        } else {
+          people = data;
+        }
+        firebaseReady = true;
+        render();
+      });
+    } catch(e) {
+      console.warn("Firebase init failed:", e);
+      people = INITIAL_DATA;
+      render();
+    }
+  }
+
+  function showSetupBanner() {
+    document.getElementById('setup-banner').style.display = 'flex';
+  }
+
+  function savePerson(id, personData) {
+    if (firebaseReady && db) {
+      set(ref(db, `closeFamily/people/${id}`), personData);
+    } else {
+      people[id] = personData;
+      render();
+    }
+  }
+
+  function addRecordToPerson(id, record) {
+    const person = people[id];
+    const records = [...(person.records || []), record];
+    savePerson(id, { ...person, records });
+  }
+
+  // ── RENDERING ──────────────────────────────────────────────
+
+  const GEN_LABELS = ["You","Father","Grandparents","Great-Grandparents","2× Great-Grandparents","3× Great-Grandparents","4× Great-Grandparents"];
+
+  function getProgress(p) {
+    let s = 0;
+    if (p.born) s++;
+    if (p.birthPlace) s++;
+    if (p.died) s++;
+    if (p.deathPlace) s++;
+    if (p.notes && p.notes.length > 40) s++;
+    if (p.records && p.records.some(r => r.type !== "Research Note")) s += 2;
+    return Math.min(100, Math.round((s/7)*100));
+  }
+
+  function progressColor(n) {
+    return n > 60 ? "#4ade80" : n > 30 ? "#fbbf24" : "#f87171";
+  }
+
+  function render() {
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+
+    const gens = {};
+    Object.values(people).forEach(p => {
+      if (!gens[p.generation]) gens[p.generation] = [];
+      gens[p.generation].push(p);
+    });
+
+    const total = Object.keys(people).length;
+    const researched = Object.values(people).filter(p => getProgress(p) > 50).length;
+
+    app.innerHTML = `
+      <div class="sidebar" id="sidebar">
+        ${selectedId ? renderPanel() : renderWelcome()}
+      </div>
+      <div class="main">
+        <div class="tabs">
+          <button class="tab ${currentView==='tree'?'active':''}" onclick="setView('tree')">🌳 Tree</button>
+          <button class="tab ${currentView==='list'?'active':''}" onclick="setView('list')">📋 List</button>
+          <button class="tab ${currentView==='research'?'active':''}" onclick="setView('research')">🔍 Research</button>
+        </div>
+        <div class="stats-bar">
+          <span>${total} ancestors documented</span>
+          <span>·</span>
+          <span>${researched} well-researched</span>
+          <span>·</span>
+          <span>Father's line · Close Family</span>
+        </div>
+        ${currentView === 'tree' ? renderTree(gens) : currentView === 'list' ? renderList() : renderResearch()}
+      </div>
+    `;
+
+    // Re-attach edit form listeners if editing
+    if (editingId) attachEditListeners();
+    attachRecordListener();
+  }
+
+  function renderWelcome() {
+    return `
+      <div class="welcome">
+        <div class="crest">⚜</div>
+        <h2>Close Family Tree</h2>
+        <p>Father's line · Est. 2026</p>
+        <div class="welcome-hint">Click any ancestor in the tree to view their details, records, and research notes.</div>
+        <div class="gen-legend">
+          ${Object.entries(GEN_LABELS).map(([g,l]) => `<div class="gen-row"><span class="gen-dot gen-${g}"></span><span>${l}</span></div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderPanel() {
+    if (editingId) return renderEditPanel();
+    const p = people[selectedId];
+    if (!p) return renderWelcome();
+    const prog = getProgress(p);
+    const pc = progressColor(prog);
+    const records = p.records || [];
+    const findings = records.filter(r => r.type !== "Research Note");
+    const notes = records.filter(r => r.type === "Research Note");
+
+    return `
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-gen">${GEN_LABELS[p.generation] || ''}</div>
+            <h2 class="panel-name">${p.name}</h2>
+            <div class="panel-dates">${p.born||'?'} – ${p.died||'?'}</div>
+          </div>
+          <button class="close-btn" onclick="closePanel()">✕</button>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-label"><span>Research Progress</span><span style="color:${pc}">${prog}%</span></div>
+          <div class="progress-track"><div class="progress-fill" style="width:${prog}%;background:${pc}"></div></div>
+        </div>
+
+        <div class="info-block">
+          <div class="block-title">Vital Records</div>
+          ${vital('Born', p.born)} ${vital('Birthplace', p.birthPlace)} ${vital('Died', p.died)} ${vital('Death Place', p.deathPlace)}
+        </div>
+
+        ${p.notes ? `<div class="info-block"><div class="block-title">Notes</div><div class="notes-text">${p.notes}</div></div>` : ''}
+
+        ${findings.length > 0 ? `
+          <div class="info-block">
+            <div class="block-title">✅ Confirmed Records (${findings.length})</div>
+            ${findings.map(r => recordCard(r, '#4ade80')).join('')}
+          </div>` : ''}
+
+        ${notes.length > 0 ? `
+          <div class="info-block">
+            <div class="block-title">💡 Research Notes (${notes.length})</div>
+            ${notes.map(r => recordCard(r, '#fbbf24')).join('')}
+          </div>` : ''}
+
+        <div class="info-block">
+          <div class="block-title">Add New Record</div>
+          <select id="rec-type" class="input-field">
+            <option value="">Select record type...</option>
+            <option>Census Record</option><option>Birth Certificate</option>
+            <option>Death Certificate</option><option>Marriage Record</option>
+            <option>Military / Draft Record</option><option>Immigration Record</option>
+            <option>Church Record</option><option>Newspaper</option>
+            <option>Research Note</option><option>Other</option>
+          </select>
+          <textarea id="rec-text" class="input-field" rows="3" placeholder="Paste record details, transcription, or notes here..."></textarea>
+          <button class="btn-primary" id="add-rec-btn">+ Add Record</button>
+        </div>
+
+        <button class="btn-edit" onclick="startEdit('${p.id}')">✏️ Edit Details</button>
+      </div>
+    `;
+  }
+
+  function renderEditPanel() {
+    const p = people[editingId];
+    return `
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-name" style="color:#4ade80">✏️ Editing</h2>
+          <button class="close-btn" onclick="cancelEdit()">✕</button>
+        </div>
+        <div class="edit-name">${p.name}</div>
+        ${editField('Full Name','edit-name-field',p.name)}
+        ${editField('Birth Date','edit-born',p.born)}
+        ${editField('Birth Place','edit-birthPlace',p.birthPlace)}
+        ${editField('Death Date','edit-died',p.died)}
+        ${editField('Death Place','edit-deathPlace',p.deathPlace)}
+        <div class="field-wrap">
+          <label class="field-label">Notes</label>
+          <textarea id="edit-notes" class="input-field" rows="5">${p.notes||''}</textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn-primary" id="save-edit-btn" style="flex:1">💾 Save Changes</button>
+          <button class="btn-cancel" onclick="cancelEdit()" style="flex:1">Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function vital(label, val) {
+    return `<div class="vital-row"><span class="vital-label">${label}</span><span class="vital-val ${val?'':'empty'}">${val||'Unknown'}</span></div>`;
+  }
+
+  function recordCard(r, color) {
+    return `<div class="record-card" style="border-left-color:${color}">
+      <div class="record-type" style="color:${color}">${r.type||'Record'}${r.date ? ' · '+r.date : ''}</div>
+      <div class="record-text">${r.text}</div>
+    </div>`;
+  }
+
+  function editField(label, id, val) {
+    return `<div class="field-wrap"><label class="field-label">${label}</label><input id="${id}" class="input-field" value="${val||''}"></div>`;
+  }
+
+  function renderTree(gens) {
+    return `<div class="tree-wrap">
+      ${Object.keys(gens).sort((a,b)=>a-b).map(g => `
+        <div class="gen-section">
+          <div class="gen-title">${GEN_LABELS[g]||'Generation '+g}</div>
+          <div class="gen-cards">
+            ${gens[g].map(p => personCard(p)).join('')}
+          </div>
+        </div>
+      `).join('')}
+      <div class="legend">🟢 Well documented &nbsp;·&nbsp; 🟡 Partial info &nbsp;·&nbsp; 🔴 Needs research</div>
+    </div>`;
+  }
+
+  function personCard(p) {
+    const prog = getProgress(p);
+    const pc = progressColor(prog);
+    const isSel = selectedId === p.id;
+    const isMale = p.gender === 'male';
+    return `
+      <div class="person-card ${isSel?'selected':''} ${isMale?'male':'female'}" onclick="selectPerson('${p.id}')">
+        <div class="card-name">${p.name}</div>
+        ${(p.born||p.died) ? `<div class="card-dates">${p.born||'?'} – ${p.died||'?'}</div>` : ''}
+        ${p.birthPlace ? `<div class="card-place">📍 ${p.birthPlace}</div>` : ''}
+        <div class="card-progress"><div style="width:${prog}%;height:100%;background:${pc};border-radius:2px"></div></div>
+        ${p.records?.length ? `<div class="record-badge">${p.records.length}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderList() {
+    const sorted = Object.values(people).sort((a,b) => a.generation - b.generation);
+    return `<div class="list-wrap">
+      ${sorted.map(p => {
+        const prog = getProgress(p);
+        const pc = progressColor(prog);
+        return `<div class="list-row ${selectedId===p.id?'selected':''} ${p.gender==='male'?'male':'female'}" onclick="selectPerson('${p.id}')">
+          <div class="list-info">
+            <div class="list-name">${p.name}</div>
+            <div class="list-meta">${GEN_LABELS[p.generation]||''} · ${p.born||'?'} – ${p.died||'?'} ${p.birthPlace?'· '+p.birthPlace:''}</div>
+          </div>
+          <div class="list-prog">
+            <div style="font-size:11px;color:${pc};text-align:right">${prog}%</div>
+            ${p.records?.length ? `<div style="font-size:10px;color:#6e7681;text-align:right">${p.records.length} records</div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function renderResearch() {
+    const sorted = Object.values(people).filter(p=>p.generation>0).sort((a,b)=>getProgress(a)-getProgress(b));
+    return `<div class="research-wrap">
+      <div class="research-header">People sorted by how much research is still needed:</div>
+      ${sorted.map(p => {
+        const prog = getProgress(p);
+        const pc = progressColor(prog);
+        const resNotes = (p.records||[]).filter(r=>r.type==="Research Note");
+        return `<div class="research-card" onclick="selectPerson('${p.id}');setView('tree')">
+          <div class="research-top">
+            <div class="research-name">${p.name}</div>
+            <div style="color:${pc};font-size:12px">${prog}% done</div>
+          </div>
+          <div class="progress-track" style="margin-bottom:6px"><div class="progress-fill" style="width:${prog}%;background:${pc}"></div></div>
+          <div class="research-meta">${GEN_LABELS[p.generation]||''} · ${p.born||'unknown birth'} · ${p.birthPlace||'unknown location'}</div>
+          ${resNotes.map(n=>`<div class="research-note">💡 ${n.text}</div>`).join('')}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // ── EVENT HANDLERS ──────────────────────────────────────────
+
+  function attachRecordListener() {
+    const btn = document.getElementById('add-rec-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const type = document.getElementById('rec-type')?.value;
+        const text = document.getElementById('rec-text')?.value?.trim();
+        if (!text || !selectedId) return;
+        addRecordToPerson(selectedId, { type: type||'Other', text, date: new Date().toLocaleDateString() });
+        document.getElementById('rec-text').value = '';
+        document.getElementById('rec-type').value = '';
+      });
+    }
+  }
+
+  function attachEditListeners() {
+    const btn = document.getElementById('save-edit-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const p = people[editingId];
+        const updated = {
+          ...p,
+          name: document.getElementById('edit-name-field')?.value || p.name,
+          born: document.getElementById('edit-born')?.value || '',
+          birthPlace: document.getElementById('edit-birthPlace')?.value || '',
+          died: document.getElementById('edit-died')?.value || '',
+          deathPlace: document.getElementById('edit-deathPlace')?.value || '',
+          notes: document.getElementById('edit-notes')?.value || ''
+        };
+        savePerson(editingId, updated);
+        selectedId = editingId;
+        editingId = null;
+      });
+    }
+  }
+
+  // ── GLOBAL FUNCTIONS (called from HTML) ────────────────────
+
+  window.selectPerson = (id) => { selectedId = id; editingId = null; render(); };
+  window.closePanel = () => { selectedId = null; editingId = null; render(); };
+  window.setView = (v) => { currentView = v; render(); };
+  window.startEdit = (id) => { editingId = id; render(); };
+  window.cancelEdit = () => { editingId = null; render(); };
+
+  // ── BOOT ───────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => { tryInitFirebase(); });
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Crimson Text', Georgia, serif;
+    background: #0a0e17;
+    color: #c9d1d9;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Setup Banner */
+  #setup-banner {
+    display: none;
+    background: #2d1f00;
+    border-bottom: 2px solid #fbbf24;
+    padding: 10px 20px;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #fbbf24;
+    flex-wrap: wrap;
+  }
+  #setup-banner strong { color: #fff; }
+  #setup-banner a { color: #fbbf24; }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, #0f1c35 0%, #0a0e17 100%);
+    border-bottom: 1px solid #1e3a5f;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .header-title { font-family: 'Playfair Display', serif; font-size: 22px; color: #60a5fa; letter-spacing: 1px; }
+  .header-sub { font-size: 12px; color: #4a5568; margin-top: 2px; font-family: 'Crimson Text', serif; }
+
+  /* Layout */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 340px;
+    background: #0f1623;
+    border-right: 1px solid #1e3a5f;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  /* Main */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #1e3a5f;
+    background: #0a0e17;
+    padding: 0 16px;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 10px 18px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #4a5568;
+    cursor: pointer;
+    font-family: 'Crimson Text', serif;
+    font-size: 15px;
+    transition: all 0.2s;
+  }
+  .tab:hover { color: #c9d1d9; }
+  .tab.active { color: #60a5fa; border-bottom-color: #60a5fa; }
+
+  .stats-bar {
+    padding: 6px 20px;
+    font-size: 11px;
+    color: #4a5568;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #1a2744;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Tree */
+  .tree-wrap { overflow-y: auto; padding: 20px; flex: 1; }
+  .gen-section { margin-bottom: 28px; }
+  .gen-title {
+    text-align: center;
+    font-family: 'Playfair Display', serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #2d5a8e;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .gen-cards { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+
+  .person-card {
+    position: relative;
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    min-width: 140px;
+    max-width: 190px;
+    border: 2px solid;
+    transition: all 0.2s;
+  }
+  .person-card.male { background: #0f2236; border-color: #2d5a8e; }
+  .person-card.female { background: #230f2a; border-color: #7c3a8e; }
+  .person-card.male.selected { background: #1e4a7a; border-color: #60a5fa; box-shadow: 0 0 18px #1e4a7a; }
+  .person-card.female.selected { background: #5a1e7a; border-color: #c084fc; box-shadow: 0 0 18px #5a1e7a; }
+  .person-card:hover { filter: brightness(1.2); }
+
+  .card-name { font-size: 13px; font-weight: 600; color: #e2e8f0; line-height: 1.3; margin-bottom: 3px; }
+  .card-dates { font-size: 11px; color: #64748b; }
+  .card-place { font-size: 10px; color: #4a5568; margin-top: 2px; }
+  .card-progress { height: 3px; background: #0a0e17; border-radius: 2px; margin-top: 7px; overflow: hidden; }
+  .record-badge {
+    position: absolute; top: 6px; right: 6px;
+    font-size: 9px; background: #fbbf24; color: #000;
+    border-radius: 8px; padding: 1px 5px; font-weight: bold;
+  }
+  .legend { text-align: center; font-size: 11px; color: #4a5568; padding: 12px 0 4px; }
+
+  /* List */
+  .list-wrap { overflow-y: auto; padding: 16px; flex: 1; }
+  .list-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #1e3a5f; margin-bottom: 6px;
+    transition: all 0.15s;
+  }
+  .list-row:hover { filter: brightness(1.2); }
+  .list-row.male { background: #0a1929; }
+  .list-row.female { background: #170a1f; }
+  .list-row.selected.male { border-color: #60a5fa; background: #0f2236; }
+  .list-row.selected.female { border-color: #c084fc; background: #230f2a; }
+  .list-info { flex: 1; }
+  .list-name { font-size: 14px; color: #e2e8f0; font-weight: 600; }
+  .list-meta { font-size: 11px; color: #4a5568; margin-top: 2px; }
+  .list-prog { text-align: right; }
+
+  /* Research */
+  .research-wrap { overflow-y: auto; padding: 16px; flex: 1; }
+  .research-header { font-size: 13px; color: #4a5568; margin-bottom: 14px; }
+  .research-card {
+    background: #0f1623; border: 1px solid #1e3a5f;
+    border-radius: 8px; padding: 14px 16px;
+    margin-bottom: 10px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .research-card:hover { border-color: #2d5a8e; }
+  .research-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .research-name { font-size: 14px; color: #e2e8f0; font-weight: 600; }
+  .research-meta { font-size: 11px; color: #4a5568; margin-top: 4px; }
+  .research-note { font-size: 11px; color: #fbbf24; margin-top: 6px; line-height: 1.4; }
+
+  /* Panel */
+  .panel { padding: 20px; }
+  .panel-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .panel-gen { font-size: 10px; color: #4a5568; text-transform: uppercase; letter-spacing: 1.5px; }
+  .panel-name { font-family: 'Playfair Display', serif; font-size: 20px; color: #60a5fa; line-height: 1.2; margin-top: 3px; }
+  .panel-dates { font-size: 13px; color: #4a5568; margin-top: 2px; }
+  .close-btn { background: none; border: none; color: #4a5568; cursor: pointer; font-size: 18px; padding: 0 4px; }
+  .close-btn:hover { color: #c9d1d9; }
+
+  .progress-wrap { margin-bottom: 16px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: #4a5568; margin-bottom: 4px; }
+  .progress-track { background: #0a0e17; border-radius: 4px; height: 5px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
+  .info-block { background: #0a0e17; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .block-title { font-size: 10px; color: #2d5a8e; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; font-family: 'Playfair Display', serif; }
+  .vital-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .vital-label { font-size: 12px; color: #4a5568; }
+  .vital-val { font-size: 12px; color: #c9d1d9; }
+  .vital-val.empty { color: #2a3a4a; font-style: italic; }
+  .notes-text { font-size: 13px; color: #c9d1d9; line-height: 1.6; }
+
+  .record-card { border-left: 3px solid; padding-left: 10px; margin-bottom: 10px; }
+  .record-type { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .record-text { font-size: 12px; color: #c9d1d9; line-height: 1.5; }
+
+  /* Forms */
+  .input-field {
+    width: 100%; padding: 7px 10px; margin-bottom: 8px;
+    background: #0f1623; border: 1px solid #1e3a5f;
+    border-radius: 5px; color: #c9d1d9; font-size: 13px;
+    font-family: 'Crimson Text', serif; resize: vertical;
+  }
+  .input-field:focus { outline: none; border-color: #60a5fa; }
+
+  .btn-primary {
+    width: 100%; padding: 8px; background: #0f2236;
+    border: 1px solid #2d5a8e; border-radius: 6px;
+    color: #60a5fa; cursor: pointer; font-size: 13px;
+    font-family: 'Crimson Text', serif; transition: all 0.2s;
+  }
+  .btn-primary:hover { background: #1e4a7a; }
+  .btn-edit {
+    width: 100%; padding: 8px; background: #0f2a1a;
+    border: 1px solid #166534; border-radius: 6px;
+    color: #4ade80; cursor: pointer; font-size: 13px;
+    font-family: 'Crimson Text', serif; margin-top: 4px;
+  }
+  .btn-cancel {
+    padding: 8px; background: #2a0f0f;
+    border: 1px solid #7f1d1d; border-radius: 6px;
+    color: #f87171; cursor: pointer; font-size: 13px;
+    font-family: 'Crimson Text', serif;
+  }
+
+  .field-wrap { margin-bottom: 10px; }
+  .field-label { display: block; font-size: 11px; color: #4a5568; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .edit-name { font-family: 'Playfair Display', serif; font-size: 16px; color: #c9d1d9; margin-bottom: 14px; }
+
+  /* Welcome */
+  .welcome { padding: 30px 20px; text-align: center; }
+  .crest { font-size: 48px; color: #2d5a8e; margin-bottom: 12px; }
+  .welcome h2 { font-family: 'Playfair Display', serif; font-size: 22px; color: #60a5fa; }
+  .welcome p { color: #4a5568; font-size: 13px; margin: 4px 0 16px; }
+  .welcome-hint { font-size: 13px; color: #4a5568; line-height: 1.6; margin-bottom: 20px; padding: 12px; background: #0a0e17; border-radius: 8px; }
+  .gen-legend { text-align: left; }
+  .gen-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; color: #8892a0; }
+  .gen-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .gen-0 { background: #60a5fa; } .gen-1 { background: #5b9bd5; } .gen-2 { background: #4a7fb5; }
+  .gen-3 { background: #3a6595; } .gen-4 { background: #2a4b75; } .gen-5 { background: #1a3155; }
+  .gen-6 { background: #0f1f3a; border: 1px solid #2d5a8e; }
+
+  /* App container */
+  #app { display: contents; }
+
+  @media (max-width: 600px) {
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #1e3a5f; max-height: 50vh; }
+    .layout { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div id="setup-banner">
+  ⚠️ <strong>Firebase not connected yet.</strong> Data is shown in preview mode only. Follow the setup instructions below to enable cloud saving and sharing. &nbsp;<a href="#setup-instructions">See instructions ↓</a>
+</div>
+
+<header>
+  <div>
+    <div class="header-title">⚜ Close Family Tree</div>
+    <div class="header-sub">Father's Line · Researched with Claude AI · 2026</div>
+  </div>
+</header>
+
+<div class="layout" id="app">
+  <div style="padding:40px;color:#4a5568;text-align:center;width:100%">Loading family tree...</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!--  SETUP INSTRUCTIONS (shown at bottom, only for the owner) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="setup-instructions" style="background:#0a0e17;border-top:2px solid #1e3a5f;padding:30px;font-family:'Crimson Text',serif;font-size:14px;color:#8892a0;line-height:1.8">
+  <h2 style="font-family:'Playfair Display',serif;color:#60a5fa;margin-bottom:16px">🔧 Firebase Setup (One-Time, ~10 Minutes)</h2>
+  <p style="margin-bottom:16px">Follow these steps to connect your family tree to a free cloud database so everyone can see the same live data:</p>
+  <ol style="padding-left:20px">
+    <li style="margin-bottom:10px"><strong style="color:#c9d1d9">Go to <a href="https://console.firebase.google.com" target="_blank" style="color:#60a5fa">console.firebase.google.com</a></strong> and sign in with your Google account.</li>
+    <li style="margin-bottom:10px"><strong style="color:#c9d1d9">Click "Add project"</strong> → name it <code style="background:#0f1623;padding:2px 6px;border-radius:3px">close-family-tree</code> → continue through the steps.</li>
+    <li style="margin-bottom:10px"><strong style="color:#c9d1d9">In your project, click "Realtime Database"</strong> in the left menu → "Create Database" → choose "Start in test mode" → pick any location.</li>
+    <li style="margin-bottom:10px"><strong style="color:#c9d1d9">Click the gear icon ⚙️ → "Project settings"</strong> → scroll down to "Your apps" → click the web icon <code>&lt;/&gt;</code> → register the app → copy the <code>firebaseConfig</code> object shown.</li>
+    <li style="margin-bottom:10px"><strong style="color:#c9d1d9">Open this HTML file in a text editor</strong> → find the section that says <code>REPLACE_WITH_YOUR_API_KEY</code> → paste in your config values.</li>
+    <li style="margin-bottom:10px"><strong style="color:#c9d1d9">Save the file and upload to GitHub Pages</strong> — from that point on, all data saves to Firebase automatically and anyone with your link sees the same tree.</li>
+  </ol>
+  <p style="margin-top:16px;color:#4a5568">Once Firebase is connected, you can delete or hide this instructions section from the HTML file.</p>
+</div>
+
+</body>
+</html>
