@@ -93,22 +93,45 @@ body{font-family:'Lato',sans-serif;background:#f5f0e8;color:#2c1810;}
 <div id="map-section" class="section active">
   <iframe id="map" src="https://www.google.com/maps/d/embed?mid=1&" style="display:none"></iframe>
   
-  <!-- Static embedded map using OpenStreetMap -->
-  <div style="position:relative;width:100%;height:420px;background:#e8e0d0;overflow:hidden;">
-    <iframe 
-      width="100%" 
-      height="420" 
-      frameborder="0" 
-      scrolling="no" 
-      marginheight="0" 
-      marginwidth="0" 
-      src="https://www.openstreetmap.org/export/embed.html?bbox=7.39%2C49.51%2C7.55%2C49.64&amp;layer=mapnik&amp;marker=49.5403786%2C7.442852200000001"
-      style="border:none;">
-    </iframe>
-    <!-- Numbered overlay pins -->
-    <div id="map-pins" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
-    </div>
-  </div>
+  <!-- Interactive map with numbered pins using Leaflet.js -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <div id="leaflet-map" style="width:100%;height:420px;"></div>
+  <script>
+  (function(){
+    var map = L.map('leaflet-map', {scrollWheelZoom: false}).setView([49.575, 7.468], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var pins = [
+      {num:1, lat:49.6070, lng:7.4657, village:"Niederalben", family:"ECKEL Family", dates:"~1600 – 1708", color:"#8b2252"},
+      {num:2, lat:49.6074, lng:7.5095, village:"Sankt Julian", family:"ECKEL / NEU Family", dates:"1691 – 1755", color:"#6b4299"},
+      {num:3, lat:49.5845, lng:7.4532, village:"Ulmet", family:"DRUMM Family", dates:"1717 – 1814", color:"#2255aa"},
+      {num:4, lat:49.5742, lng:7.4418, village:"Erdesbach", family:"DRUMM Family", dates:"1784", color:"#227799"},
+      {num:5, lat:49.5404, lng:7.4429, village:"Rammelsbach", family:"CLOS Family", dates:"1779 – 1848", color:"#227744"},
+      {num:6, lat:49.5523, lng:7.4640, village:"Altenglan", family:"CLOS Family", dates:"~1805 – 1830s", color:"#886622"},
+      {num:7, lat:49.5405, lng:7.4656, village:"Mühlbach an der Glan", family:"CLOSE Family — Last born here", dates:"1850", color:"#aa2222"}
+    ];
+
+    pins.forEach(function(p) {
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:'+p.color+';color:#fff;font-weight:700;font-size:13px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);">'+p.num+'</div>',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16]
+      });
+      L.marker([p.lat, p.lng], {icon: icon})
+        .addTo(map)
+        .bindPopup('<div style="font-family:Lato,sans-serif;min-width:160px;"><div style="background:'+p.color+';color:#fff;padding:6px 10px;margin:-10px -10px 8px;border-radius:4px 4px 0 0;font-weight:700;">📍 '+p.village+'</div><div style="font-size:12px;color:#5c3520;font-weight:700;">'+p.family+'</div><div style="font-size:11px;color:#8b6914;font-style:italic;">'+p.dates+'</div></div>');
+    });
+
+    // Draw a light line connecting the villages in chronological order
+    var latlngs = pins.map(function(p){ return [p.lat, p.lng]; });
+    L.polyline(latlngs, {color:'#d4a853', weight:1.5, opacity:0.5, dashArray:'5,8'}).addTo(map);
+  })();
+  </script>
 
   <!-- Interactive Google Maps link -->
   <div style="background:#2c1810;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
