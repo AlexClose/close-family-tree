@@ -180,18 +180,48 @@ var editingId = null;
 var isMobile = window.innerWidth < 700;
 var GEN_LABELS = ["You","Father","Grandparents","Great-Grandparents","2× Great-Grandparents","3× Great-Grandparents","4× Great-Grandparents","5× Great-Grandparents","6× Great-Grandparents","7× Great-Grandparents","8× Great-Grandparents","9× Great-Grandparents","10× Great-Grandparents","11× Great-Grandparents"];
 
+// DATA_VERSION — bump this each time research is updated to force Firebase sync
+var DATA_VERSION = 3;
+
+function smartMerge(fbData) {
+  var merged = {};
+  Object.keys(INITIAL_DATA).forEach(function(k) {
+    var base = JSON.parse(JSON.stringify(INITIAL_DATA[k]));
+    var fb = fbData[k];
+    if (fb) {
+      // Keep user field edits only if they differ from original AND are non-empty
+      ['born','birthPlace','died','deathPlace'].forEach(function(f) {
+        if (fb[f] && fb[f] !== INITIAL_DATA[k][f]) base[f] = fb[f];
+      });
+      if (fb.notes && fb.notes.length > (INITIAL_DATA[k].notes||'').length) base.notes = fb.notes;
+      // Merge records: keep INITIAL_DATA records + any user-added ones
+      var initRecs = INITIAL_DATA[k].records || [];
+      var fbRecs = fb.records || [];
+      var userRecs = fbRecs.filter(function(fr) {
+        return !initRecs.some(function(ir) { return ir.text === fr.text; });
+      });
+      base.records = initRecs.concat(userRecs);
+    }
+    merged[k] = base;
+  });
+  // Keep any user-added people not in INITIAL_DATA
+  Object.keys(fbData).forEach(function(k) {
+    if (!merged[k]) merged[k] = fbData[k];
+  });
+  return merged;
+}
+
 db.ref('closeFamily/people').on('value', function(snap) {
   var data = snap.val();
   if (!data) {
     db.ref('closeFamily/people').set(INITIAL_DATA);
+    db.ref('closeFamily/dataVersion').set(DATA_VERSION);
     people = INITIAL_DATA;
   } else {
-    // Merge — add any new people from INITIAL_DATA that aren't in Firebase yet
-    var merged = Object.assign({}, INITIAL_DATA, data);
-    // Update new people to Firebase
-    Object.keys(INITIAL_DATA).forEach(function(k) {
-      if (!data[k]) db.ref('closeFamily/people/'+k).set(INITIAL_DATA[k]);
-    });
+    var merged = smartMerge(data);
+    // Push merged data back so Firebase stays up to date with latest research
+    db.ref('closeFamily/people').set(merged);
+    db.ref('closeFamily/dataVersion').set(DATA_VERSION);
     people = merged;
   }
   document.getElementById('status').textContent = Object.keys(people).length + ' ancestors';
@@ -342,7 +372,7 @@ function renderPanel(forOverlay) {
       '<option>Church Record</option><option>Newspaper</option><option>Research Note</option><option>Other</option>'+
       '</select>'+
       '<textarea id="rec-text" class="inp" rows="3" placeholder="Paste record details or notes here..."></textarea>'+
-      '<button class="btn-add" id="add-rec-btn">+ Add Record</button>'+
+      '<button class="btn-add" onclick="doAddRecord()">+ Add Record</button>'+
     '</div>'+
     '<button class="btn-edit" id="edit-btn" onclick="startEdit(\''+p.id+'\')">✏️ Edit Details</button>'+
     '</div>';
@@ -368,7 +398,7 @@ function renderEditPanel(forOverlay) {
     '<div class="field-wrap"><label class="field-lbl">Notes</label>'+
     '<textarea id="e-notes" class="inp" rows="5">'+(p.notes||'')+'</textarea></div>'+
     '<div style="display:flex;gap:8px;">'+
-    '<button class="btn-save" id="save-edit-btn">💾 Save</button>'+
+    '<button class="btn-save" onclick="doSaveEdit()">💾 Save</button>'+
     '<button class="btn-cancel" onclick="cancelEdit()">Cancel</button>'+
     '</div></div>';
 }
@@ -378,34 +408,56 @@ function ef(label, id, val) {
 }
 
 function attachPanelListeners() {
-  var addBtn = document.getElementById('add-rec-btn');
-  if (addBtn) {
-    addBtn.addEventListener('click', function(){
-      var type = (document.getElementById('rec-type')||{}).value||'Other';
-      var text = ((document.getElementById('rec-text')||{}).value||'').trim();
-      if (!text || !selectedId) return;
-      var p = people[selectedId];
-      var recs = (p.records||[]).concat([{type:type,text:text,date:new Date().toLocaleDateString()}]);
-      savePerson(selectedId, Object.assign({},p,{records:recs}));
-      document.getElementById('rec-text').value='';
-    });
+  // Use onclick on buttons directly to avoid mobile listener issues
+}
+
+function doAddRecord() {
+  var typeEl = document.getElementById('rec-type');
+  var textEl = document.getElementById('rec-text');
+  if (!typeEl || !textEl || !selectedId) return;
+  var type = typeEl.value || 'Other';
+  var text = textEl.value.trim();
+  if (!text) { alert('Please enter record details first.'); return; }
+  var p = people[selectedId];
+  var recs = (p.records||[]).concat([{type:type, text:text, date:new Date().toLocaleDateString()}]);
+  savePerson(selectedId, Object.assign({},p,{records:recs}));
+  textEl.value = '';
+  typeEl.value = '';
+  // Re-render panel
+  isMobile = window.innerWidth < 700;
+  if (isMobile) {
+    document.getElementById('overlay-content').innerHTML = renderPanel(true);
+  } else {
+    var dc = document.getElementById('detail-col');
+    dc.innerHTML = renderPanel(false);
   }
-  var saveBtn = document.getElementById('save-edit-btn');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', function(){
-      var p = people[editingId];
-      var updated = Object.assign({},p,{
-        name: document.getElementById('e-name').value||p.name,
-        born: document.getElementById('e-born').value||'',
-        birthPlace: document.getElementById('e-birthplace').value||'',
-        died: document.getElementById('e-died').value||'',
-        deathPlace: document.getElementById('e-deathplace').value||'',
-        notes: document.getElementById('e-notes').value||''
-      });
-      savePerson(editingId, updated);
-      selectedId = editingId;
-      editingId = null;
-    });
+}
+
+function doSaveEdit() {
+  if (!editingId) return;
+  var p = people[editingId];
+  var nameEl = document.getElementById('e-name');
+  var bornEl = document.getElementById('e-born');
+  var bpEl = document.getElementById('e-birthplace');
+  var diedEl = document.getElementById('e-died');
+  var dpEl = document.getElementById('e-deathplace');
+  var notesEl = document.getElementById('e-notes');
+  if (!nameEl) { alert('Form not found - please try again.'); return; }
+  var updated = Object.assign({}, p, {
+    name: nameEl.value || p.name,
+    born: bornEl.value || '',
+    birthPlace: bpEl.value || '',
+    died: diedEl.value || '',
+    deathPlace: dpEl.value || '',
+    notes: notesEl.value || ''
+  });
+  savePerson(editingId, updated);
+  selectedId = editingId;
+  editingId = null;
+  render();
+  if (window.innerWidth < 700) {
+    document.getElementById('mobile-overlay').classList.remove('open');
+    setTimeout(function(){ selectPerson(selectedId); }, 300);
   }
 }
 
@@ -446,6 +498,7 @@ function cancelEdit() {
 }
 window.selectPerson=selectPerson;window.closePanel=closePanel;window.closeOverlay=closeOverlay;
 window.setView=setView;window.startEdit=startEdit;window.cancelEdit=cancelEdit;
+window.doAddRecord=doAddRecord;window.doSaveEdit=doSaveEdit;
 </script>
 </body>
 </html>
